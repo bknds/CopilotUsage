@@ -2,15 +2,22 @@
 
 A macOS menubar app that shows your GitHub Copilot premium request usage and overage cost in real time.
 
-![Status bar preview](https://raw.githubusercontent.com/bknds/CopilotUsage/main/screenshot.png)
+**Status bar:**
+
+![Status bar](screenshot_statusbar.png)
+
+**Popover panel:**
+
+![Panel](screenshot_panel.png)
 
 ## Features
 
-- **Status bar**: shows usage percentage and estimated overage cost (`620% | $62.36 ≈ ¥449`)
+- **Status bar**: shows usage percentage and estimated overage cost (`674% | $68.88 ≈ ¥496`)
 - **Popover panel**: detailed breakdown — subscription info, premium usage progress bar, overage count and cost in USD/CNY
 - **One-click GitHub login**: uses Device Flow OAuth — no manual token entry, no OAuth App registration required
 - **Auto-refresh**: fetches latest usage every 5 minutes
-- **Logout / Quit**: accessible from the popover footer with confirmation dialogs
+- **Auto-update**: notifies you in the panel when a new version is available
+- **Right-click to quit**: right-click the menubar icon for a quick exit menu
 
 ## Requirements
 
