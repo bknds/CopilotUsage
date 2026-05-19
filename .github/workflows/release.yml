@@ -1,0 +1,81 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: macos-15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set version
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+      - name: Update version in source
+        run: |
+          sed -i '' "s/static let currentVersion = \".*\"/static let currentVersion = \"$VERSION\"/" Sources/CopilotUsage/GitHubService.swift
+
+      - name: Build
+        run: swift build -c release
+
+      - name: Assemble app bundle
+        run: |
+          APP=CopilotUsage.app
+          mkdir -p "$APP/Contents/MacOS"
+          mkdir -p "$APP/Contents/Resources"
+          cp .build/release/CopilotUsage "$APP/Contents/MacOS/"
+          cp Sources/CopilotUsage/Resources/*.ttf "$APP/Contents/Resources/"
+          cp Sources/CopilotUsage/Resources/*.png "$APP/Contents/Resources/"
+          # Info.plist
+          cat > "$APP/Contents/Info.plist" << EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleExecutable</key><string>CopilotUsage</string>
+            <key>CFBundleIdentifier</key><string>com.bknds.CopilotUsage</string>
+            <key>CFBundleName</key><string>CopilotUsage</string>
+            <key>CFBundleVersion</key><string>$VERSION</string>
+            <key>CFBundleShortVersionString</key><string>$VERSION</string>
+            <key>LSUIElement</key><true/>
+            <key>NSHighResolutionCapable</key><true/>
+          </dict>
+          </plist>
+          EOF
+
+      - name: Copy app icon
+        run: |
+          if [ -f "../AppIcon.icns" ]; then
+            cp ../AppIcon.icns CopilotUsage.app/Contents/Resources/AppIcon.icns
+          fi
+        continue-on-error: true
+
+      - name: Ad-hoc codesign
+        run: codesign --force --deep --sign - CopilotUsage.app
+
+      - name: Install create-dmg
+        run: brew install create-dmg
+
+      - name: Build DMG
+        run: |
+          create-dmg \
+            --volname "CopilotUsage" \
+            --window-pos 200 120 \
+            --window-size 500 320 \
+            --icon-size 100 \
+            --icon "CopilotUsage.app" 130 160 \
+            --app-drop-link 370 160 \
+            "CopilotUsage-$VERSION.dmg" \
+            CopilotUsage.app
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: CopilotUsage-${{ env.VERSION }}.dmg
+          generate_release_notes: true

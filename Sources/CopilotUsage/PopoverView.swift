@@ -260,6 +260,24 @@ struct CopilotPopoverView: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
+
+            if let release = service.newRelease {
+                Divider()
+                Button(action: {
+                    if let url = URL(string: release.url) { NSWorkspace.shared.open(url) }
+                }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.down.circle.fill")
+                            .foregroundColor(.accentColor)
+                        Text("有新版本 v\(release.version)，点击下载")
+                            .font(.ibm.caption)
+                            .foregroundColor(.accentColor)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+                }
+                .buttonStyle(.plain)
+            }
         }
     }
 

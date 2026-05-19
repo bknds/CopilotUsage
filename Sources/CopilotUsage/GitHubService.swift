@@ -99,6 +99,11 @@ enum AuthState {
     case authorized
 }
 
+struct ReleaseInfo {
+    let version: String
+    let url: String
+}
+
 @MainActor
 class GitHubCopilotService: ObservableObject {
     @Published var usageData: CopilotUsageData?
@@ -106,6 +111,9 @@ class GitHubCopilotService: ObservableObject {
     @Published var errorMessage: String?
     @Published var authState: AuthState = .notAuthorized
     @Published var settings: AppSettings = .default
+    @Published var newRelease: ReleaseInfo?
+
+    static let currentVersion = "1.0.0"
 
     // GitHub Copilot for Neovim — publicly known client_id, used for Device Flow
     private let clientId = "Iv1.b507a08c87ecfe98"
@@ -308,6 +316,21 @@ class GitHubCopilotService: ObservableObject {
         }
         if !settings.githubToken.isEmpty {
             Task { await fetchUsage() }
+        }
+        Task { await checkForUpdate() }
+    }
+
+    func checkForUpdate() async {
+        guard let url = URL(string: "https://api.github.com/repos/bknds/CopilotUsage/releases/latest") else { return }
+        var req = URLRequest(url: url)
+        req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        guard let (data, _) = try? await URLSession.shared.data(for: req),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let tag = json["tag_name"] as? String,
+              let htmlUrl = json["html_url"] as? String else { return }
+        let latest = tag.hasPrefix("v") ? String(tag.dropFirst()) : tag
+        if latest.compare(Self.currentVersion, options: .numeric) == .orderedDescending {
+            newRelease = ReleaseInfo(version: latest, url: htmlUrl)
         }
     }
 }
