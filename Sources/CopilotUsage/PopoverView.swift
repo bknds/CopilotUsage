@@ -109,6 +109,21 @@ struct CopilotPopoverView: View {
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
+
+            Button("退出") {
+                let alert = NSAlert()
+                alert.messageText = "确认退出"
+                alert.informativeText = "退出后菜单栏图标将消失。"
+                alert.addButton(withTitle: "退出")
+                alert.addButton(withTitle: "取消")
+                alert.alertStyle = .warning
+                if alert.runModal() == .alertFirstButtonReturn {
+                    NSApplication.shared.terminate(nil)
+                }
+            }
+            .buttonStyle(.plain)
+            .font(.ibm.caption)
+            .foregroundColor(.secondary)
         }
         .padding(.horizontal, 24)
         .padding(.vertical, 20)

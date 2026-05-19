@@ -53,10 +53,28 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func setupStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = statusItem.button {
-            button.action = #selector(togglePopover)
+            button.action = #selector(handleClick)
+            button.sendAction(on: [.leftMouseUp, .rightMouseUp])
             button.target = self
         }
         Task { @MainActor in self.updateStatusItemTitle() }
+    }
+
+    @objc private func handleClick() {
+        guard let event = NSApp.currentEvent else { return }
+        if event.type == .rightMouseUp {
+            let menu = NSMenu()
+            menu.addItem(withTitle: "退出 CopilotUsage", action: #selector(quitApp), keyEquivalent: "q")
+            statusItem.menu = menu
+            statusItem.button?.performClick(nil)
+            statusItem.menu = nil
+        } else {
+            togglePopover()
+        }
+    }
+
+    @objc private func quitApp() {
+        NSApplication.shared.terminate(nil)
     }
 
     private func setupPopover() {
@@ -139,6 +157,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
         } else if service.isLoading {
             result.append(NSAttributedString(string: "...", attributes: attrs))
+        } else if case .notAuthorized = service.authState {
+            result.append(NSAttributedString(string: "未关联 GitHub 账号", attributes: attrs))
         } else {
             result.append(NSAttributedString(string: "--", attributes: attrs))
         }
