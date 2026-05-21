@@ -279,19 +279,51 @@ struct CopilotPopoverView: View {
             if let release = service.newRelease {
                 Divider()
                 Button(action: {
-                    if let url = URL(string: release.url) { NSWorkspace.shared.open(url) }
+                    if case .idle = service.updateState {
+                        Task { await service.installUpdate() }
+                    } else if case .failed = service.updateState {
+                        service.updateState = .idle
+                        Task { await service.installUpdate() }
+                    }
                 }) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "arrow.down.circle.fill")
-                            .foregroundColor(.accentColor)
-                        Text("有新版本 v\(release.version)，点击下载")
-                            .font(.ibm.caption)
-                            .foregroundColor(.accentColor)
+                    HStack(spacing: 6) {
+                        switch service.updateState {
+                        case .idle:
+                            Image(systemName: "arrow.down.circle.fill")
+                                .foregroundColor(.accentColor)
+                            Text("有新版本 v\(release.version)，点击自动更新")
+                                .font(.ibm.caption)
+                                .foregroundColor(.accentColor)
+                        case .downloading(let progress):
+                            ProgressView(value: progress)
+                                .frame(width: 60)
+                            Text("下载中 \(Int(progress * 100))%")
+                                .font(.ibm.caption)
+                                .foregroundColor(.secondary)
+                        case .installing:
+                            ProgressView()
+                                .scaleEffect(0.7)
+                            Text("安装中...")
+                                .font(.ibm.caption)
+                                .foregroundColor(.secondary)
+                        case .failed(let msg):
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundColor(.orange)
+                            Text(msg)
+                                .font(.ibm.caption)
+                                .foregroundColor(.orange)
+                                .lineLimit(2)
+                        }
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 8)
                 }
                 .buttonStyle(.plain)
+                .disabled({
+                    if case .downloading = service.updateState { return true }
+                    if case .installing = service.updateState { return true }
+                    return false
+                }())
             }
         }
     }

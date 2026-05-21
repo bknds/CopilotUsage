@@ -102,6 +102,14 @@ enum AuthState {
 struct ReleaseInfo {
     let version: String
     let url: String
+    let dmgUrl: String?
+}
+
+enum UpdateState: Equatable {
+    case idle
+    case downloading(progress: Double)
+    case installing
+    case failed(String)
 }
 
 @MainActor
@@ -112,6 +120,7 @@ class GitHubCopilotService: ObservableObject {
     @Published var authState: AuthState = .notAuthorized
     @Published var settings: AppSettings = .default
     @Published var newRelease: ReleaseInfo?
+    @Published var updateState: UpdateState = .idle
 
     static let currentVersion = "1.0.0"
 
@@ -330,7 +339,85 @@ class GitHubCopilotService: ObservableObject {
               let htmlUrl = json["html_url"] as? String else { return }
         let latest = tag.hasPrefix("v") ? String(tag.dropFirst()) : tag
         if latest.compare(Self.currentVersion, options: .numeric) == .orderedDescending {
-            newRelease = ReleaseInfo(version: latest, url: htmlUrl)
+            let assets = json["assets"] as? [[String: Any]] ?? []
+            let dmgUrl = assets
+                .first { ($0["name"] as? String)?.hasSuffix(".dmg") == true }
+                .flatMap { $0["browser_download_url"] as? String }
+            newRelease = ReleaseInfo(version: latest, url: htmlUrl, dmgUrl: dmgUrl)
         }
+    }
+
+    func installUpdate() async {
+        guard let release = newRelease, let dmgUrlStr = release.dmgUrl,
+              let dmgUrl = URL(string: dmgUrlStr) else {
+            if let release = newRelease, let url = URL(string: release.url) {
+                NSWorkspace.shared.open(url)
+            }
+            return
+        }
+
+        updateState = .downloading(progress: 0)
+
+        // Download DMG
+        let tempDir = FileManager.default.temporaryDirectory
+        let dmgPath = tempDir.appendingPathComponent("CopilotUsage-update.dmg")
+
+        do {
+            let (downloadUrl, _) = try await URLSession.shared.download(from: dmgUrl)
+            try? FileManager.default.removeItem(at: dmgPath)
+            try FileManager.default.moveItem(at: downloadUrl, to: dmgPath)
+        } catch {
+            updateState = .failed("下载失败: \(error.localizedDescription)")
+            return
+        }
+
+        updateState = .installing
+
+        // Mount DMG
+        let mountResult = shell("hdiutil attach '\(dmgPath.path)' -nobrowse -quiet -mountpoint /tmp/CopilotUsageUpdate")
+        guard mountResult == 0 else {
+            updateState = .failed("挂载 DMG 失败")
+            return
+        }
+
+        // Find .app in mounted volume
+        let mountPoint = "/tmp/CopilotUsageUpdate"
+        guard let appName = (try? FileManager.default.contentsOfDirectory(atPath: mountPoint))?
+            .first(where: { $0.hasSuffix(".app") }) else {
+            _ = shell("hdiutil detach '\(mountPoint)' -quiet")
+            updateState = .failed("未找到应用")
+            return
+        }
+
+        let sourceApp = "\(mountPoint)/\(appName)"
+        let currentAppPath = Bundle.main.bundlePath
+        let destDir = (currentAppPath as NSString).deletingLastPathComponent
+
+        // Copy new app over current
+        let copyResult = shell("ditto '\(sourceApp)' '\(destDir)/\(appName)'")
+        _ = shell("hdiutil detach '\(mountPoint)' -quiet")
+        try? FileManager.default.removeItem(at: dmgPath)
+
+        guard copyResult == 0 else {
+            updateState = .failed("安装失败，请手动下载安装")
+            if let url = URL(string: release.url) { NSWorkspace.shared.open(url) }
+            return
+        }
+
+        // Relaunch
+        let newAppPath = "\(destDir)/\(appName)"
+        let relaunchScript = "sleep 1; open '\(newAppPath)'"
+        Process.launchedProcess(launchPath: "/bin/sh", arguments: ["-c", relaunchScript])
+        NSApp.terminate(nil)
+    }
+
+    @discardableResult
+    private func shell(_ command: String) -> Int32 {
+        let process = Process()
+        process.launchPath = "/bin/sh"
+        process.arguments = ["-c", command]
+        process.launch()
+        process.waitUntilExit()
+        return process.terminationStatus
     }
 }
