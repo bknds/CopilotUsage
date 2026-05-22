@@ -33,6 +33,9 @@ struct CopilotPopoverView: View {
             Text("Copilot")
                 .font(.ibm.headline)
                 .fontWeight(.semibold)
+            Text("v\(GitHubCopilotService.currentVersion)")
+                .font(.ibm.caption)
+                .foregroundColor(.secondary)
 
             Spacer()
 
